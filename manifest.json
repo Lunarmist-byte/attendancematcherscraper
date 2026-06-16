@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Attendance Scraper",
+  "version": "1.0",
+  "description": "Scrapes event attendance and time, and exports as JSON.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
