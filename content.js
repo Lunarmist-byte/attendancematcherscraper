@@ -4,6 +4,7 @@
     organizers: [],
     attendees: [],
     scraped_names: [],
+    rejected: [],
     time_string: "",
     class_hours: []
   };
@@ -60,21 +61,34 @@
     if (nameSpans.length > 0) {
       nameSpans.forEach(span => {
         const name = span.textContent.trim();
-        if (name && !data.scraped_names.includes(name)) {
-          data.scraped_names.push(name);
+        let container = span.closest('div[class*="flex"]') || span.parentElement?.parentElement;
+        let isMissed = container && container.textContent.toLowerCase().includes('missed');
+        
+        if (name) {
+          if (isMissed) {
+             if (!data.rejected.includes(name)) data.rejected.push(name);
+          } else {
+             if (!data.scraped_names.includes(name)) data.scraped_names.push(name);
+          }
         }
       });
     } else {
       // Fallback: avatar siblings
       const avatars = document.querySelectorAll('img[src*="avatar"], img[src*="profile"], .rounded-full img');
       avatars.forEach(img => {
-        const parent = img.closest('div[class*="flex-col"]') || img.parentElement?.parentElement;
+        const parent = img.closest('div[class*="flex-col"]') || img.closest('div[class*="flex"]') || img.parentElement?.parentElement;
         if (parent) {
+           let isMissed = parent.textContent.toLowerCase().includes('missed');
            const textNodes = Array.from(parent.querySelectorAll('span, div, p')).filter(el => el.children.length === 0 && el.textContent.trim().length > 0 && el.textContent.trim().length < 30);
            textNodes.forEach(node => {
               const name = node.textContent.trim();
-              if (name && !data.scraped_names.includes(name)) {
-                data.scraped_names.push(name);
+              // Try to filter out common status words
+              if (name && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(name.toLowerCase())) {
+                if (isMissed) {
+                  if (!data.rejected.includes(name)) data.rejected.push(name);
+                } else {
+                  if (!data.scraped_names.includes(name)) data.scraped_names.push(name);
+                }
               }
            });
         }
