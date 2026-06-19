@@ -56,19 +56,62 @@
     }
 
     // 2. Scrape Names
+    function getCategory(node) {
+      let current = node;
+      while (current && current !== document.body) {
+        let sibling = current.previousElementSibling;
+        while (sibling) {
+          let text = sibling.textContent.toLowerCase().trim();
+          if (text.includes('missed')) return 'rejected';
+          if (text.includes('hosts')) return 'hosts';
+          if (text.includes('organizers')) return 'organizers';
+          if (text.includes('attendees')) return 'attendees';
+          sibling = sibling.previousElementSibling;
+        }
+        current = current.parentElement;
+      }
+      // Fallback to text content if it's a small container
+      let container = node.closest('div[class*="flex-col"]') || node.closest('div[class*="flex"]');
+      if (container && container.textContent.length < 500) {
+          let text = container.textContent.toLowerCase();
+          if (text.includes('missed')) return 'rejected';
+          if (text.includes('hosts')) return 'hosts';
+          if (text.includes('organizers')) return 'organizers';
+      }
+      return 'attendees';
+    }
+
     // Based on Luma structure: span with text-[10px] class
     const nameSpans = document.querySelectorAll('span[class*="text-[10px]"]');
     if (nameSpans.length > 0) {
       nameSpans.forEach(span => {
-        const name = span.textContent.trim();
+        let name = span.textContent.trim();
         let container = span.closest('div[class*="flex"]') || span.parentElement?.parentElement;
-        let isMissed = container && container.textContent.toLowerCase().includes('missed');
         
+        // Attempt to extract full name from hidden attributes to avoid pinging
+        if (container) {
+          const img = container.querySelector('img');
+          if (img && img.alt && img.alt.trim()) {
+            const altName = img.alt.trim().replace(/'s avatar$/i, '').trim();
+            // Prefer the alt name if it's longer (likely the full name)
+            if (altName.length > name.length) name = altName;
+          } else if (span.title && span.title.trim()) {
+            name = span.title.trim();
+          } else if (container.title && container.title.trim()) {
+            name = container.title.trim();
+          }
+        }
+
         if (name) {
-          if (isMissed) {
+          let category = getCategory(container || span);
+          if (category === 'rejected') {
              if (!data.rejected.includes(name)) data.rejected.push(name);
+          } else if (category === 'hosts') {
+             if (!data.hosts.includes(name)) data.hosts.push(name);
+          } else if (category === 'organizers') {
+             if (!data.organizers.includes(name)) data.organizers.push(name);
           } else {
-             if (!data.scraped_names.includes(name)) data.scraped_names.push(name);
+             if (!data.attendees.includes(name)) data.attendees.push(name);
           }
         }
       });
@@ -78,24 +121,47 @@
       avatars.forEach(img => {
         const parent = img.closest('div[class*="flex-col"]') || img.closest('div[class*="flex"]') || img.parentElement?.parentElement;
         if (parent) {
-           let isMissed = parent.textContent.toLowerCase().includes('missed');
-           const textNodes = Array.from(parent.querySelectorAll('span, div, p')).filter(el => el.children.length === 0 && el.textContent.trim().length > 0 && el.textContent.trim().length < 30);
-           textNodes.forEach(node => {
-              const name = node.textContent.trim();
-              // Try to filter out common status words
-              if (name && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(name.toLowerCase())) {
-                if (isMissed) {
-                  if (!data.rejected.includes(name)) data.rejected.push(name);
-                } else {
-                  if (!data.scraped_names.includes(name)) data.scraped_names.push(name);
-                }
-              }
-           });
+           
+           let nameToUse = null;
+           
+           // 1. Try to extract full name from image alt text
+           if (img.alt && img.alt.trim()) {
+             let altName = img.alt.trim().replace(/'s avatar$/i, '').trim();
+             if (altName && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(altName.toLowerCase())) {
+               nameToUse = altName;
+             }
+           }
+
+           // 2. If no alt text, fallback to parsing text nodes
+           if (!nameToUse) {
+             const textNodes = Array.from(parent.querySelectorAll('span, div, p')).filter(el => el.children.length === 0 && el.textContent.trim().length > 0 && el.textContent.trim().length < 30);
+             for (let node of textNodes) {
+               let name = node.textContent.trim();
+               if (node.title && node.title.trim().length > name.length) {
+                 name = node.title.trim();
+               }
+               if (name && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(name.toLowerCase())) {
+                 nameToUse = name;
+                 break; // Found the first likely name
+               }
+             }
+           }
+
+           if (nameToUse) {
+             let category = getCategory(parent || img);
+             if (category === 'rejected') {
+               if (!data.rejected.includes(nameToUse)) data.rejected.push(nameToUse);
+             } else if (category === 'hosts') {
+               if (!data.hosts.includes(nameToUse)) data.hosts.push(nameToUse);
+             } else if (category === 'organizers') {
+               if (!data.organizers.includes(nameToUse)) data.organizers.push(nameToUse);
+             } else {
+               if (!data.attendees.includes(nameToUse)) data.attendees.push(nameToUse);
+             }
+           }
         }
       });
     }
-
-    data.attendees = data.scraped_names;
 
   } catch (err) {
     console.error("Attendance Scraper Error:", err);

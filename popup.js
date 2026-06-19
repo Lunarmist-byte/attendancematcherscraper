@@ -25,7 +25,7 @@ async function scrapeData(format) {
           filename: 'attendance.json',
           saveAs: true
         }, () => {
-          statusDiv.textContent = `Scraped ${data.attendees.length} attendees & ${data.rejected?.length || 0} rejected!`;
+          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, & ${data.rejected?.length || 0} missed!`;
         });
       } else if (format === 'pdf') {
         const { jsPDF } = window.jspdf;
@@ -39,40 +39,31 @@ async function scrapeData(format) {
         doc.text("Class Hours: " + (data.class_hours ? data.class_hours.join(", ") : "N/A"), 10, 38);
         
         let yPos = 50;
-        doc.setFontSize(14);
-        doc.text("Attendees:", 10, yPos);
-        yPos += 8;
         
-        doc.setFontSize(11);
-        if (data.attendees && data.attendees.length > 0) {
-          data.attendees.forEach(name => {
-            doc.text("- " + name, 15, yPos);
+        function addSection(title, list) {
+          if (yPos > 270) { doc.addPage(); yPos = 20; }
+          doc.setFontSize(14);
+          doc.text(title, 10, yPos);
+          yPos += 8;
+          
+          doc.setFontSize(11);
+          if (list && list.length > 0) {
+            list.forEach(name => {
+              doc.text("- " + name, 15, yPos);
+              yPos += 6;
+              if (yPos > 280) { doc.addPage(); yPos = 20; }
+            });
+          } else {
+            doc.text("None found", 15, yPos);
             yPos += 6;
-            if (yPos > 280) { doc.addPage(); yPos = 20; }
-          });
-        } else {
-          doc.text("None found", 15, yPos);
+          }
           yPos += 6;
         }
-        
-        yPos += 6;
-        if (yPos > 270) { doc.addPage(); yPos = 20; }
-        
-        doc.setFontSize(14);
-        doc.text("Rejected (Missed):", 10, yPos);
-        yPos += 8;
-        
-        doc.setFontSize(11);
-        if (data.rejected && data.rejected.length > 0) {
-          data.rejected.forEach(name => {
-            doc.text("- " + name, 15, yPos);
-            yPos += 6;
-            if (yPos > 280) { doc.addPage(); yPos = 20; }
-          });
-        } else {
-          doc.text("None found", 15, yPos);
-          yPos += 6;
-        }
+
+        if (data.hosts && data.hosts.length > 0) addSection("Hosts:", data.hosts);
+        if (data.organizers && data.organizers.length > 0) addSection("Organizers:", data.organizers);
+        addSection("Attendees:", data.attendees);
+        addSection("Missed:", data.rejected);
 
         const pdfBlob = doc.output('blob');
         const url = URL.createObjectURL(pdfBlob);
@@ -82,7 +73,7 @@ async function scrapeData(format) {
           filename: 'attendance.pdf',
           saveAs: true
         }, () => {
-          statusDiv.textContent = `Scraped ${data.attendees.length} attendees & ${data.rejected?.length || 0} rejected!`;
+          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, & ${data.rejected?.length || 0} missed!`;
         });
       }
     } else {
