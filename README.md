@@ -1,6 +1,7 @@
 # Attendance Scraper
 
 A Google Chrome extension that scrapes event attendance lists and event times from webpages (primarily designed for Luma event pages) and exports the data as a JSON file.
+Made to work with [CCEA-Clubs](https://github.com/aswin7512/CCEA-Clubs), might work with other Luma pages
 
 ## Features
 
