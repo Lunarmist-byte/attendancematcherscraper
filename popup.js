@@ -33,58 +33,78 @@ async function scrapeData(format) {
           filename: jsonFilename,
           saveAs: true
         }, () => {
-          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees!`;
+          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.missed?.length || 0} missed!`;
         });
       } else if (format === 'pdf') {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        doc.setFontSize(16);
-        doc.text("Event Attendance", 10, 20);
-        
-        doc.setFontSize(12);
-        doc.text("Time: " + (data.time_string || "N/A"), 10, 30);
-        doc.text("Class Hours: " + (data.class_hours ? data.class_hours.join(", ") : "N/A"), 10, 38);
-        
-        let yPos = 50;
-        
-        function addSection(title, list) {
-          if (yPos > 270) { doc.addPage(); yPos = 20; }
-          doc.setFontSize(14);
-          doc.text(title, 10, yPos);
-          yPos += 8;
+
+        function createAndDownloadPDF(pdfTitle, sectionsData, filename) {
+          const doc = new jsPDF();
+          doc.setFontSize(16);
+          doc.text(pdfTitle, 10, 20);
           
-          doc.setFontSize(11);
-          if (list && list.length > 0) {
-            list.forEach(item => {
-              const displayName = typeof item === 'object' && item !== null ? item.name : item;
-              doc.text("- " + displayName, 15, yPos);
+          doc.setFontSize(12);
+          doc.text("Time: " + (data.time_string || "N/A"), 10, 30);
+          doc.text("Class Hours: " + (data.class_hours ? data.class_hours.join(", ") : "N/A"), 10, 38);
+          
+          let yPos = 50;
+          
+          function addSection(title, list) {
+            if (yPos > 270) { doc.addPage(); yPos = 20; }
+            doc.setFontSize(14);
+            doc.text(title, 10, yPos);
+            yPos += 8;
+            
+            doc.setFontSize(11);
+            if (list && list.length > 0) {
+              list.forEach(item => {
+                const displayName = typeof item === 'object' && item !== null ? item.name : item;
+                doc.text("- " + displayName, 15, yPos);
+                yPos += 6;
+                if (yPos > 280) { doc.addPage(); yPos = 20; }
+              });
+            } else {
+              doc.text("None found", 15, yPos);
               yPos += 6;
-              if (yPos > 280) { doc.addPage(); yPos = 20; }
-            });
-          } else {
-            doc.text("None found", 15, yPos);
+            }
             yPos += 6;
           }
-          yPos += 6;
+
+          sectionsData.forEach(sec => {
+            if (sec.list && sec.list.length > 0) {
+              addSection(sec.title, sec.list);
+            }
+          });
+
+          const pdfBlob = doc.output('blob');
+          const url = URL.createObjectURL(pdfBlob);
+          
+          chrome.downloads.download({
+            url: url,
+            filename: filename,
+            saveAs: true
+          });
         }
 
-        if (data.hosts && data.hosts.length > 0) addSection("Hosts:", data.hosts);
-        if (data.organizers && data.organizers.length > 0) addSection("Organizers:", data.organizers);
-        addSection("Attendees:", data.attendees);
-
-        const pdfBlob = doc.output('blob');
-        const url = URL.createObjectURL(pdfBlob);
-        
         let pdfFilename = filenameBase.endsWith('.pdf') ? filenameBase : filenameBase + '.pdf';
+        let missedFilename = filenameBase.endsWith('.pdf') ? filenameBase.replace('.pdf', '_missed.pdf') : filenameBase + '_missed.pdf';
 
-        chrome.downloads.download({
-          url: url,
-          filename: pdfFilename,
-          saveAs: true
-        }, () => {
-          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees!`;
-        });
+        const mainSections = [
+          { title: "Hosts:", list: data.hosts },
+          { title: "Organizers:", list: data.organizers },
+          { title: "Attendees:", list: data.attendees }
+        ];
+
+        createAndDownloadPDF("Event Attendance", mainSections, pdfFilename);
+
+        if (data.missed && data.missed.length > 0) {
+          const missedSections = [
+            { title: "Missed:", list: data.missed }
+          ];
+          createAndDownloadPDF("Missed Attendance", missedSections, missedFilename);
+        }
+
+        statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.missed?.length || 0} missed!`;
       }
     } else {
       statusDiv.textContent = 'Failed to scrape data.';

@@ -7,7 +7,8 @@
     appbucket_links: [],
     time_string: "",
     class_hours: [],
-    event_name: "attendance"
+    event_name: "attendance",
+    raw_event_name: ""
   };
 
   let db = {};
@@ -99,9 +100,11 @@
     // 2. Scrape Event Name
     const h1 = document.querySelector('h1');
     if (h1 && h1.innerText.trim()) {
-      data.event_name = h1.innerText.trim();
+      data.raw_event_name = h1.innerText.trim();
+      data.event_name = data.raw_event_name;
     } else if (document.title) {
-      data.event_name = document.title.split('-')[0].trim() || document.title;
+      data.raw_event_name = document.title.split('-')[0].trim() || document.title;
+      data.event_name = data.raw_event_name;
     }
     data.event_name = data.event_name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     if (!data.event_name) data.event_name = "attendance";
@@ -117,6 +120,7 @@
            if (/^hosts?(?:\s*\d+)?$/.test(txt)) currentCategory = 'hosts';
            else if (/^(?:organizers?|co-hosts?)(?:\s*\d+)?$/.test(txt)) currentCategory = 'organizers';
            else if (/^(?:attendees?|guests?)(?:\s*\d+)?$/.test(txt)) currentCategory = 'attendees';
+           else if (/^missed(?:\s*\d+)?$/.test(txt)) currentCategory = 'missed';
        }
 
        if (el.tagName === 'IMG') {
@@ -142,20 +146,20 @@
              container.childNodes.forEach(node => {
                if (node.nodeType === Node.TEXT_NODE) {
                  const t = node.textContent.trim();
-                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t))) texts.push({ txt: t, node: node });
+                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t)) && !/^\d+%$/.test(t)) texts.push({ txt: t, node: node });
                }
              });
              container.querySelectorAll('*').forEach(node => {
                if (node.children.length === 0) {
                  const t = node.textContent.trim();
-                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t))) texts.push({ txt: t, node: node });
+                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t)) && !/^\d+%$/.test(t)) texts.push({ txt: t, node: node });
                }
              });
 
              for (let item of texts) {
                const lower = item.txt.toLowerCase();
                const ignore = ['hosts', 'organizers', 'attendees', 'guests', 'missed', 'approved', 'rejected', 'going', 'not going', 'location', 'anywhere', 'photos', 'audience'];
-               if (!ignore.includes(lower) && !/^[^\w\s]+$/.test(lower)) {
+               if (!ignore.includes(lower) && !/^[^\w\s]+$/.test(lower) && item.txt !== data.raw_event_name) {
                  name = item.txt;
                  if (!profile_link && item.node && item.node.nodeType === Node.ELEMENT_NODE) {
                      const a = item.node.closest('a');
