@@ -25,6 +25,15 @@
     button:hover {
       background-color: #4f46e5;
     }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
     #status {
       font-size: 12px;
       color: #6b7280;
@@ -33,9 +42,19 @@
 </head>
 <body>
   <h3 style="margin-top: 0;">Attendance Scraper</h3>
+  <input type="text" id="filenameInput" placeholder="Event name (used for filename)" />
+  <button id="scrapeMembersBtn" style="background-color: #f59e0b;">Scrape Members DB</button>
   <button id="scrapeJsonBtn">Download JSON</button>
   <button id="scrapePdfBtn" style="background-color: #ef4444;">Download PDF</button>
+  <button id="cceaBtn" style="background-color: #10b981;">Open Maker Clubs</button>
+  <button id="optionsBtn" style="background-color: #6b7280;">⚙️ Setup Database</button>
   <div id="status">Ready. Open an event page to scrape.</div>
+  
+  <div id="uploadContainer" style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+    <h4 style="margin: 0 0 4px 0; font-size: 12px; color: #374151;">Upload db.json to Supabase</h4>
+    <input type="file" id="dbUploadInput" accept=".json" style="width: 100%; margin-bottom: 8px; font-size: 11px;" />
+    <button id="uploadSupabaseBtn" style="background-color: #3b82f6;">Sync to Supabase</button>
+  </div>
   <script src="jspdf.umd.min.js"></script>
   <script src="popup.js"></script>
 </body>

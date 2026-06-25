@@ -1,24 +1,66 @@
-(() => {
+(async () => {
   const data = {
     hosts: [],
     organizers: [],
     attendees: [],
     scraped_names: [],
-    rejected: [],
+    appbucket_links: [],
     time_string: "",
-    class_hours: []
+    class_hours: [],
+    event_name: "attendance"
   };
+
+  let db = {};
+  try {
+    const storage = await chrome.storage.local.get(['memberDB', 'supabaseUrl', 'supabaseKey']);
+    if (storage.memberDB) {
+        db = storage.memberDB;
+    }
+    
+    if (storage.supabaseUrl && storage.supabaseKey) {
+        try {
+            const res = await fetch(`${storage.supabaseUrl}/rest/v1/profiles?select=name,avatar_url&avatar_url=not.is.null`, {
+                headers: {
+                    'apikey': storage.supabaseKey,
+                    'Authorization': `Bearer ${storage.supabaseKey}`
+                }
+            });
+            if (res.ok) {
+                const profiles = await res.json();
+                profiles.forEach(p => {
+                    if (p.avatar_url && p.name) {
+                        db[p.avatar_url] = p.name;
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("Could not fetch Supabase profiles", e);
+        }
+    }
+    try {
+        const dbUrl = chrome.runtime.getURL('db.json');
+        const dbRes = await fetch(dbUrl);
+        const jsonDb = await dbRes.json();
+        db = { ...jsonDb, ...db };
+    } catch (e) {}
+  } catch (e) {
+    console.warn("Could not load db from storage", e);
+  }
 
   try {
     // 1. Scrape Time
-    // Match patterns like "08:00 PM - 09:00 PM" or "Feb 16 • 08:00 PM - Feb 16 • 09:00 PM"
-    const timeRegex = /((?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm))\s*-\s*(?:[A-Za-z]{3}\s*\d{1,2}\s*•\s*)?((?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm))/i;
-    
-    const bodyText = document.body.innerText;
-    const match = bodyText.match(timeRegex);
-    if (match) {
-      data.time_string = match[0];
-      data.class_hours = mapTimeToClassHours(match[1], match[2]);
+    const bodyText = document.body.innerText || "";
+    const allTimes = bodyText.match(/(?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm)/gi);
+    if (allTimes && allTimes.length >= 2) {
+      data.time_string = allTimes[0] + " - " + allTimes[1];
+      data.class_hours = mapTimeToClassHours(allTimes[0], allTimes[1]);
+    } else {
+      const lumaTimeRegex = /((?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm))\s*-\s*(?:[A-Za-z]{3}\s*\d{1,2}\s*•\s*)?((?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm))/i;
+      const match = bodyText.match(lumaTimeRegex);
+      if (match) {
+        data.time_string = match[0];
+        data.class_hours = mapTimeToClassHours(match[1], match[2]);
+      }
     }
 
     function parseTime(timeStr) {
@@ -47,7 +89,6 @@
       ];
 
       for (const slot of slots) {
-        // Strict overlap logic
         if (startMins < slot.end && endMins > slot.start) {
           hours.add(slot.num);
         }
@@ -55,110 +96,137 @@
       return Array.from(hours).sort((a,b)=>a-b);
     }
 
-    // 2. Scrape Names
-    function getCategory(node) {
-      let current = node;
-      while (current && current !== document.body) {
-        let sibling = current.previousElementSibling;
-        while (sibling) {
-          let text = sibling.textContent.toLowerCase().trim();
-          if (text.includes('missed')) return 'rejected';
-          if (text.includes('hosts')) return 'hosts';
-          if (text.includes('organizers')) return 'organizers';
-          if (text.includes('attendees')) return 'attendees';
-          sibling = sibling.previousElementSibling;
-        }
-        current = current.parentElement;
-      }
-      // Fallback to text content if it's a small container
-      let container = node.closest('div[class*="flex-col"]') || node.closest('div[class*="flex"]');
-      if (container && container.textContent.length < 500) {
-          let text = container.textContent.toLowerCase();
-          if (text.includes('missed')) return 'rejected';
-          if (text.includes('hosts')) return 'hosts';
-          if (text.includes('organizers')) return 'organizers';
-      }
-      return 'attendees';
+    // 2. Scrape Event Name
+    const h1 = document.querySelector('h1');
+    if (h1 && h1.innerText.trim()) {
+      data.event_name = h1.innerText.trim();
+    } else if (document.title) {
+      data.event_name = document.title.split('-')[0].trim() || document.title;
     }
+    data.event_name = data.event_name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    if (!data.event_name) data.event_name = "attendance";
 
-    // Based on Luma structure: span with text-[10px] class
-    const nameSpans = document.querySelectorAll('span[class*="text-[10px]"]');
-    if (nameSpans.length > 0) {
+    // 3. Scrape Names (Robust Generic Method)
+    const elements = document.body.querySelectorAll('*');
+    let currentCategory = 'attendees';
+    const scraped = new Set();
+
+    elements.forEach(el => {
+       const txt = el.textContent ? el.textContent.toLowerCase().trim() : "";
+       if (txt.length > 0 && txt.length < 25) {
+           if (/^hosts?(?:\s*\d+)?$/.test(txt)) currentCategory = 'hosts';
+           else if (/^(?:organizers?|co-hosts?)(?:\s*\d+)?$/.test(txt)) currentCategory = 'organizers';
+           else if (/^(?:attendees?|guests?)(?:\s*\d+)?$/.test(txt)) currentCategory = 'attendees';
+       }
+
+       if (el.tagName === 'IMG') {
+           const img = el;
+           const rect = img.getBoundingClientRect();
+           
+           if (rect.width === 0 || rect.height === 0 || rect.width > 150 || rect.height > 150) return;
+           const aspectRatio = rect.width / rect.height;
+           if (aspectRatio < 0.7 || aspectRatio > 1.3) return;
+
+           let container = img.parentElement;
+           let name = "";
+           let profile_link = "";
+           let depth = 0;
+           
+           const imgLink = img.closest('a');
+           if (imgLink && imgLink.href) {
+               profile_link = imgLink.href;
+           }
+           
+           while (container && depth < 4) {
+             let texts = [];
+             container.childNodes.forEach(node => {
+               if (node.nodeType === Node.TEXT_NODE) {
+                 const t = node.textContent.trim();
+                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t))) texts.push({ txt: t, node: node });
+               }
+             });
+             container.querySelectorAll('*').forEach(node => {
+               if (node.children.length === 0) {
+                 const t = node.textContent.trim();
+                 if (t.length >= 2 && t.length <= 30 && isNaN(Number(t))) texts.push({ txt: t, node: node });
+               }
+             });
+
+             for (let item of texts) {
+               const lower = item.txt.toLowerCase();
+               const ignore = ['hosts', 'organizers', 'attendees', 'guests', 'missed', 'approved', 'rejected', 'going', 'not going', 'location', 'anywhere', 'photos', 'audience'];
+               if (!ignore.includes(lower) && !/^[^\w\s]+$/.test(lower)) {
+                 name = item.txt;
+                 if (!profile_link && item.node && item.node.nodeType === Node.ELEMENT_NODE) {
+                     const a = item.node.closest('a');
+                     if (a && a.href) profile_link = a.href;
+                 } else if (!profile_link && item.node && item.node.nodeType === Node.TEXT_NODE) {
+                     const a = item.node.parentElement.closest('a');
+                     if (a && a.href) profile_link = a.href;
+                 }
+                 break;
+               }
+             }
+
+             if (!profile_link && container.tagName === 'A' && container.href) {
+                 profile_link = container.href;
+             }
+
+             if (name) break;
+             container = container.parentElement;
+             depth++;
+           }
+
+             if (name && !scraped.has(img.src + name)) {
+                 if (db[img.src]) {
+                     name = db[img.src];
+                 } else {
+                     const baseSrc = img.src.split('?')[0];
+                     const matchedKey = Object.keys(db).find(k => k.startsWith(baseSrc));
+                     if (matchedKey) name = db[matchedKey];
+                 }
+
+                 scraped.add(img.src + name);
+                 const person = { name, avatar_url: img.src, profile_link };
+                 data[currentCategory].push(person);
+                 data.scraped_names.push(person);
+             }
+       }
+    });
+
+    // Luma fallback
+    if (data.scraped_names.length === 0) {
+      const nameSpans = document.querySelectorAll('span[class*="text-[10px]"]');
       nameSpans.forEach(span => {
-        let name = span.textContent.trim();
-        let container = span.closest('div[class*="flex"]') || span.parentElement?.parentElement;
+        const name = span.textContent.trim();
+        const parent = span.closest('div[class*="flex-col"]') || span.parentElement?.parentElement;
         
-        // Attempt to extract full name from hidden attributes to avoid pinging
-        if (container) {
-          const img = container.querySelector('img');
-          if (img && img.alt && img.alt.trim()) {
-            const altName = img.alt.trim().replace(/'s avatar$/i, '').trim();
-            // Prefer the alt name if it's longer (likely the full name)
-            if (altName.length > name.length) name = altName;
-          } else if (span.title && span.title.trim()) {
-            name = span.title.trim();
-          } else if (container.title && container.title.trim()) {
-            name = container.title.trim();
-          }
-        }
-
-        if (name) {
-          let category = getCategory(container || span);
-          if (category === 'rejected') {
-             if (!data.rejected.includes(name)) data.rejected.push(name);
-          } else if (category === 'hosts') {
-             if (!data.hosts.includes(name)) data.hosts.push(name);
-          } else if (category === 'organizers') {
-             if (!data.organizers.includes(name)) data.organizers.push(name);
-          } else {
-             if (!data.attendees.includes(name)) data.attendees.push(name);
-          }
-        }
-      });
-    } else {
-      // Fallback: avatar siblings
-      const avatars = document.querySelectorAll('img[src*="avatar"], img[src*="profile"], .rounded-full img');
-      avatars.forEach(img => {
-        const parent = img.closest('div[class*="flex-col"]') || img.closest('div[class*="flex"]') || img.parentElement?.parentElement;
+        let avatar_url = null;
         if (parent) {
-           
-           let nameToUse = null;
-           
-           // 1. Try to extract full name from image alt text
-           if (img.alt && img.alt.trim()) {
-             let altName = img.alt.trim().replace(/'s avatar$/i, '').trim();
-             if (altName && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(altName.toLowerCase())) {
-               nameToUse = altName;
-             }
-           }
+          const avatarSpan = parent.querySelector('span[class*="AvatarStyles"]');
+          if (avatarSpan) {
+            const innerImg = avatarSpan.querySelector('img');
+            if (innerImg && innerImg.src) avatar_url = innerImg.src;
+            else {
+              const style = avatarSpan.getAttribute('style') || '';
+              const bgMatch = style.match(/url\(['"]?(.*?)['"]?\)/);
+              if (bgMatch) avatar_url = bgMatch[1];
+            }
+          }
+        }
+        
+        if (name && !data.scraped_names.some(n => n.name === name)) {
+          if (avatar_url && db[avatar_url]) {
+             name = db[avatar_url];
+          } else if (avatar_url) {
+             const baseSrc = avatar_url.split('?')[0];
+             const matchedKey = Object.keys(db).find(k => k.startsWith(baseSrc));
+             if (matchedKey) name = db[matchedKey];
+          }
 
-           // 2. If no alt text, fallback to parsing text nodes
-           if (!nameToUse) {
-             const textNodes = Array.from(parent.querySelectorAll('span, div, p')).filter(el => el.children.length === 0 && el.textContent.trim().length > 0 && el.textContent.trim().length < 30);
-             for (let node of textNodes) {
-               let name = node.textContent.trim();
-               if (node.title && node.title.trim().length > name.length) {
-                 name = node.title.trim();
-               }
-               if (name && !['missed', 'approved', 'checked in', 'going', 'not going'].includes(name.toLowerCase())) {
-                 nameToUse = name;
-                 break; // Found the first likely name
-               }
-             }
-           }
-
-           if (nameToUse) {
-             let category = getCategory(parent || img);
-             if (category === 'rejected') {
-               if (!data.rejected.includes(nameToUse)) data.rejected.push(nameToUse);
-             } else if (category === 'hosts') {
-               if (!data.hosts.includes(nameToUse)) data.hosts.push(nameToUse);
-             } else if (category === 'organizers') {
-               if (!data.organizers.includes(nameToUse)) data.organizers.push(nameToUse);
-             } else {
-               if (!data.attendees.includes(nameToUse)) data.attendees.push(nameToUse);
-             }
-           }
+          const person = { name, avatar_url };
+          data.scraped_names.push(person);
+          data.attendees.push(person);
         }
       });
     }

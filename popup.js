@@ -16,16 +16,24 @@ async function scrapeData(format) {
     if (results && results[0] && results[0].result) {
       const data = results[0].result;
       
+      let filenameBase = document.getElementById('filenameInput').value.trim();
+      if (!filenameBase) {
+        filenameBase = data.event_name || 'attendance';
+        document.getElementById('filenameInput').value = filenameBase;
+      }
+      
       if (format === 'json') {
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         
+        let jsonFilename = filenameBase.endsWith('.json') ? filenameBase : filenameBase + '.json';
+
         chrome.downloads.download({
           url: url,
-          filename: 'attendance.json',
+          filename: jsonFilename,
           saveAs: true
         }, () => {
-          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, & ${data.rejected?.length || 0} missed!`;
+          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees!`;
         });
       } else if (format === 'pdf') {
         const { jsPDF } = window.jspdf;
@@ -48,8 +56,9 @@ async function scrapeData(format) {
           
           doc.setFontSize(11);
           if (list && list.length > 0) {
-            list.forEach(name => {
-              doc.text("- " + name, 15, yPos);
+            list.forEach(item => {
+              const displayName = typeof item === 'object' && item !== null ? item.name : item;
+              doc.text("- " + displayName, 15, yPos);
               yPos += 6;
               if (yPos > 280) { doc.addPage(); yPos = 20; }
             });
@@ -63,17 +72,18 @@ async function scrapeData(format) {
         if (data.hosts && data.hosts.length > 0) addSection("Hosts:", data.hosts);
         if (data.organizers && data.organizers.length > 0) addSection("Organizers:", data.organizers);
         addSection("Attendees:", data.attendees);
-        addSection("Missed:", data.rejected);
 
         const pdfBlob = doc.output('blob');
         const url = URL.createObjectURL(pdfBlob);
         
+        let pdfFilename = filenameBase.endsWith('.pdf') ? filenameBase : filenameBase + '.pdf';
+
         chrome.downloads.download({
           url: url,
-          filename: 'attendance.pdf',
+          filename: pdfFilename,
           saveAs: true
         }, () => {
-          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, & ${data.rejected?.length || 0} missed!`;
+          statusDiv.textContent = `Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees!`;
         });
       }
     } else {
@@ -84,3 +94,115 @@ async function scrapeData(format) {
 
 document.getElementById('scrapeJsonBtn').addEventListener('click', () => scrapeData('json'));
 document.getElementById('scrapePdfBtn').addEventListener('click', () => scrapeData('pdf'));
+document.getElementById('cceaBtn').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://maker-clubs.netlify.app' });
+});
+document.getElementById('optionsBtn').addEventListener('click', () => {
+  if (chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  } else {
+    window.open(chrome.runtime.getURL('options.html'));
+  }
+});
+
+document.getElementById('scrapeMembersBtn').addEventListener('click', async () => {
+  const statusDiv = document.getElementById('status');
+  statusDiv.textContent = 'Scraping members...';
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ['member_scraper.js']
+  }, (results) => {
+    if (chrome.runtime.lastError) {
+      statusDiv.textContent = 'Error: ' + chrome.runtime.lastError.message;
+      return;
+    }
+    
+    if (results && results[0] && results[0].result) {
+      const data = results[0].result;
+      
+      if (data.supabaseUpdates && data.supabaseUpdates.length > 0) {
+        const blob = new Blob([JSON.stringify(data.supabaseUpdates, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        chrome.downloads.download({
+          url: url,
+          filename: 'db.json',
+          saveAs: true
+        }, () => {
+          statusDiv.textContent = `Scraped ${data.supabaseUpdates.length} members. Edit db.json and upload!`;
+        });
+      } else {
+        statusDiv.textContent = 'No members found.';
+      }
+    } else {
+      statusDiv.textContent = 'Failed to scrape members.';
+    }
+  });
+});
+
+document.getElementById('uploadSupabaseBtn').addEventListener('click', async () => {
+  const statusDiv = document.getElementById('status');
+  const fileInput = document.getElementById('dbUploadInput');
+  
+  if (fileInput.files.length === 0) {
+      statusDiv.textContent = 'Please select a db.json file first.';
+      return;
+  }
+  
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  
+  reader.onload = async (e) => {
+      let updates = [];
+      try {
+          updates = JSON.parse(e.target.result);
+      } catch (err) {
+          statusDiv.textContent = 'Invalid JSON file.';
+          return;
+      }
+      
+      if (!Array.isArray(updates)) {
+          statusDiv.textContent = 'JSON should be an array of members.';
+          return;
+      }
+
+      statusDiv.textContent = 'Uploading to Supabase...';
+      
+      chrome.storage.local.get(['supabaseUrl', 'supabaseKey'], async (storage) => {
+        if (!storage.supabaseUrl || !storage.supabaseKey) {
+          statusDiv.textContent = 'Error: Configure Supabase first.';
+          return;
+        }
+        
+        let supabaseSuccessCount = 0;
+        for (const update of updates) {
+           if (!update.email) continue;
+           try {
+             const res = await fetch(`${storage.supabaseUrl}/rest/v1/profiles?email=eq.${encodeURIComponent(update.email)}`, {
+                 method: 'PATCH',
+                 headers: {
+                     'apikey': storage.supabaseKey,
+                     'Authorization': `Bearer ${storage.supabaseKey}`,
+                     'Content-Type': 'application/json',
+                     'Prefer': 'return=minimal'
+                 },
+                 body: JSON.stringify({ avatar_url: update.avatar_url })
+             });
+             if (res.ok) {
+                 supabaseSuccessCount++;
+             }
+           } catch (err) {
+               console.error("Supabase update error", err);
+           }
+        }
+        statusDiv.textContent = `Upload complete! Synced ${supabaseSuccessCount} out of ${updates.length}.`;
+      });
+  };
+  
+  reader.readAsText(file);
+});
+
+
