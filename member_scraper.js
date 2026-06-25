@@ -46,13 +46,21 @@
   });
 
   // Save to storage and merge with existing
-  const storage = await new Promise(resolve => chrome.storage.local.get(['memberDB', 'supabaseUrl', 'supabaseKey'], resolve));
+  const storage = await new Promise(resolve => chrome.storage.local.get(['memberDB', 'supabaseUpdates', 'supabaseUrl', 'supabaseKey'], resolve));
   const newDb = { ...(storage.memberDB || {}), ...members };
-  await new Promise(resolve => chrome.storage.local.set({ memberDB: newDb }, resolve));
+  
+  const existingUpdates = storage.supabaseUpdates || [];
+  const updatesMap = new Map();
+  existingUpdates.forEach(u => updatesMap.set(u.email, u));
+  supabaseUpdates.forEach(u => updatesMap.set(u.email, u));
+  const mergedUpdates = Array.from(updatesMap.values());
+
+  await new Promise(resolve => chrome.storage.local.set({ memberDB: newDb, supabaseUpdates: mergedUpdates }, resolve));
 
   return { 
     count: Object.keys(members).length, 
     total: Object.keys(newDb).length,
-    supabaseUpdates: supabaseUpdates
+    newUpdatesCount: supabaseUpdates.length,
+    totalUpdatesCount: mergedUpdates.length
   };
 })();

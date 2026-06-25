@@ -122,24 +122,38 @@ document.getElementById('scrapeMembersBtn').addEventListener('click', async () =
     
     if (results && results[0] && results[0].result) {
       const data = results[0].result;
-      
-      if (data.supabaseUpdates && data.supabaseUpdates.length > 0) {
-        const blob = new Blob([JSON.stringify(data.supabaseUpdates, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        chrome.downloads.download({
-          url: url,
-          filename: 'db.json',
-          saveAs: true
-        }, () => {
-          statusDiv.textContent = `Scraped ${data.supabaseUpdates.length} members. Edit db.json and upload!`;
-        });
-      } else {
-        statusDiv.textContent = 'No members found.';
-      }
+      statusDiv.textContent = `Scraped ${data.newUpdatesCount} new members. Total accumulated: ${data.totalUpdatesCount}.`;
     } else {
       statusDiv.textContent = 'Failed to scrape members.';
     }
+  });
+});
+
+document.getElementById('downloadDbBtn').addEventListener('click', () => {
+  const statusDiv = document.getElementById('status');
+  chrome.storage.local.get(['supabaseUpdates'], (storage) => {
+    const updates = storage.supabaseUpdates || [];
+    if (updates.length > 0) {
+      const blob = new Blob([JSON.stringify(updates, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      chrome.downloads.download({
+        url: url,
+        filename: 'db.json',
+        saveAs: true
+      }, () => {
+        statusDiv.textContent = `Downloaded db.json with ${updates.length} members.`;
+      });
+    } else {
+      statusDiv.textContent = 'No members accumulated yet.';
+    }
+  });
+});
+
+document.getElementById('clearDbBtn').addEventListener('click', () => {
+  const statusDiv = document.getElementById('status');
+  chrome.storage.local.remove(['supabaseUpdates', 'memberDB'], () => {
+    statusDiv.textContent = 'Accumulated database cleared.';
   });
 });
 
