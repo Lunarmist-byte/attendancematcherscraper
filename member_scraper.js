@@ -3,9 +3,18 @@
   const supabaseUpdates = [];
   
   // Find all images
-  const imgs = document.querySelectorAll('img');
-  imgs.forEach(img => {
-    let container = img.parentElement;
+  const elements = document.querySelectorAll('img, [style*="background-image"]');
+  elements.forEach(el => {
+    let src = null;
+    if (el.tagName === 'IMG') {
+        src = el.src;
+    } else {
+        const bgMatch = el.style.backgroundImage.match(/url\(['"]?(.*?)['"]?\)/);
+        if (bgMatch) src = bgMatch[1];
+    }
+    if (!src || src.startsWith('data:image')) return;
+
+    let container = el.parentElement;
     let depth = 0;
     let name = "";
     let email = "";
@@ -35,11 +44,11 @@
       depth++;
     }
     
-    if (name && img.src && img.src.startsWith('http')) {
-        members[img.src] = name;
+    if (name && src && src.startsWith('http')) {
+        members[src] = name;
         if (email) {
             if (!supabaseUpdates.some(u => u.email === email)) {
-                supabaseUpdates.push({ name, email, avatar_url: img.src });
+                supabaseUpdates.push({ name, email, avatar_url: src });
             }
         }
     }

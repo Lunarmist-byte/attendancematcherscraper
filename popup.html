@@ -2,64 +2,58 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Attendance Scraper</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      padding: 16px;
-      width: 250px;
-      text-align: center;
-    }
-    button {
-      background-color: #6366f1;
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      width: 100%;
-      margin-bottom: 12px;
-      transition: background-color 0.2s;
-    }
-    button:hover {
-      background-color: #4f46e5;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-      font-family: inherit;
-    }
-    #status {
-      font-size: 12px;
-      color: #6b7280;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h3 style="margin-top: 0;">Attendance Scraper</h3>
-  <input type="text" id="filenameInput" placeholder="Event name (used for filename)" />
-  <button id="scrapeMembersBtn" style="background-color: #f59e0b;">Scrape Members DB</button>
-  <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-    <button id="downloadDbBtn" style="background-color: #3b82f6; margin-bottom: 0;">Download db.json</button>
-    <button id="clearDbBtn" style="background-color: #ef4444; margin-bottom: 0;">Clear DB</button>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h3 style="margin: 0;">Attendance Scraper</h3>
+    <button id="themeToggle" class="btn-secondary" style="width: auto; padding: 6px; margin: 0; background: transparent; color: var(--text-main);" title="Toggle Theme">
+      <i data-lucide="moon"></i>
+    </button>
   </div>
-  <button id="scrapeJsonBtn">Download JSON</button>
-  <button id="scrapePdfBtn" style="background-color: #ef4444;">Download PDF</button>
-  <button id="cceaBtn" style="background-color: #10b981;">Open Maker Clubs</button>
-  <button id="optionsBtn" style="background-color: #6b7280;">⚙️ Setup Database</button>
-  <div id="status">Ready. Open an event page to scrape.</div>
   
-  <div id="uploadContainer" style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-    <h4 style="margin: 0 0 4px 0; font-size: 12px; color: #374151;">Upload db.json to Supabase</h4>
-    <input type="file" id="dbUploadInput" accept=".json" style="width: 100%; margin-bottom: 8px; font-size: 11px;" />
-    <button id="uploadSupabaseBtn" style="background-color: #3b82f6;">Sync to Supabase</button>
+  <input type="text" id="filenameInput" placeholder="Custom filename (optional)" />
+  
+  <div class="btn-group">
+    <button id="scrapePdfBtn"><i data-lucide="file-text"></i> PDF</button>
+    <button id="scrapeJsonBtn"><i data-lucide="file-json"></i> JSON</button>
   </div>
+  
+  <div class="divider"></div>
+  
+  <div class="section">
+    <h4>Member Sync</h4>
+    <button id="scrapeMembersBtn" class="btn-secondary"><i data-lucide="users"></i> Scrape Members</button>
+    <div class="btn-group">
+      <button id="downloadDbBtn" class="btn-secondary"><i data-lucide="download"></i> Download db.json</button>
+      <button id="clearDbBtn" class="btn-danger"><i data-lucide="trash-2"></i> Clear DB</button>
+    </div>
+    
+    <div style="display: flex; gap: 8px; margin-top: 8px; align-items: center;">
+      <input type="file" id="dbUploadInput" accept=".json" style="margin-bottom: 0;" />
+      <button id="uploadSupabaseBtn" class="btn-success" style="margin-bottom: 0; padding: 6px 12px; white-space: nowrap;"><i data-lucide="upload-cloud"></i> Sync</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="btn-group">
+    <button id="optionsBtn" class="btn-secondary"><i data-lucide="settings"></i> Config</button>
+    <button id="cceaBtn" class="btn-secondary"><i data-lucide="external-link"></i> Maker Clubs</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div style="margin-top: 16px; font-size: 11px; color: var(--text-muted); text-align: center;">
+    Made by <strong>Lunarmist-byte</strong><br>
+    <a href="https://github.com/Lunarmist-byte" target="_blank" style="color: var(--primary-color); text-decoration: none; margin-right: 8px;">GitHub</a>
+    <a href="https://www.linkedin.com/in/amal-s-kumar-ba69a1290/" target="_blank" style="color: var(--primary-color); text-decoration: none;">LinkedIn</a>
+  </div>
+
+  <!-- Scripts -->
   <script src="jspdf.umd.min.js"></script>
+  <script src="lucide.min.js"></script>
+  <script src="theme.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
