@@ -52,73 +52,87 @@ const downloadJSON = (data, filenameBase) => {
   const jsonFilename = filenameBase.endsWith('.json') ? filenameBase : `${filenameBase}.json`;
 
   chrome.downloads.download({ url, filename: jsonFilename, saveAs: true }, () => {
-    setStatus(`Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.missed?.length || 0} missed!`);
+    setStatus(`Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.rejected?.length || 0} missed!`);
   });
 };
 
 const generateAndDownloadPDF = (data, filenameBase) => {
-  const { jsPDF } = window.jspdf;
+  try {
+    const jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+    if (!jsPDF) {
+      setStatus('Error: jsPDF library not found.');
+      return;
+    }
 
-  const createPDFDoc = (pdfTitle, sectionsData, filename) => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(pdfTitle, 10, 20);
-    
-    doc.setFontSize(12);
-    doc.text(`Time: ${data.time_string || "N/A"}`, 10, 30);
-    doc.text(`Class Hours: ${data.class_hours ? data.class_hours.join(", ") : "N/A"}`, 10, 38);
-    
-    let yPos = 50;
-    
-    const addSection = (title, list) => {
-      if (yPos > 270) { doc.addPage(); yPos = 20; }
-      doc.setFontSize(14);
-      doc.text(title, 10, yPos);
-      yPos += 8;
+    const createPDFDoc = (pdfTitle, sectionsData, filename) => {
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text(pdfTitle, 10, 20);
       
-      doc.setFontSize(11);
-      if (list && list.length > 0) {
-        list.forEach(item => {
-          const displayName = formatMemberForPdf(item);
-          doc.text(`- ${displayName}`, 15, yPos);
+      doc.setFontSize(12);
+      const safeTimeString = (data.time_string || "N/A")
+        .replace(/[^\x00-\x7F]/g, " ")
+        .replace(/[\r\n]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      doc.text(`Time: ${safeTimeString}`, 10, 30);
+      doc.text(`Class Hours: ${data.class_hours || ""}`, 10, 38);
+      
+      let yPos = 50;
+      
+      const addSection = (title, list) => {
+        if (yPos > 270) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(14);
+        doc.text(title, 10, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(11);
+        if (list && list.length > 0) {
+          list.forEach(item => {
+            const displayName = String(formatMemberForPdf(item)).replace(/[^\x00-\x7F]/g, "");
+            doc.text(`- ${displayName}`, 15, yPos);
+            yPos += 6;
+            if (yPos > 280) { doc.addPage(); yPos = 20; }
+          });
+        } else {
+          doc.text("None found", 15, yPos);
           yPos += 6;
-          if (yPos > 280) { doc.addPage(); yPos = 20; }
-        });
-      } else {
-        doc.text("None found", 15, yPos);
+        }
         yPos += 6;
-      }
-      yPos += 6;
+      };
+
+      sectionsData.forEach(sec => {
+        if (sec.list && sec.list.length > 0) {
+          addSection(sec.title, sec.list);
+        }
+      });
+
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      
+      chrome.downloads.download({ url, filename, saveAs: true });
     };
 
-    sectionsData.forEach(sec => {
-      if (sec.list && sec.list.length > 0) {
-        addSection(sec.title, sec.list);
-      }
-    });
+    const pdfFilename = filenameBase.endsWith('.pdf') ? filenameBase : `${filenameBase}.pdf`;
+    const missedFilename = filenameBase.endsWith('.pdf') ? filenameBase.replace('.pdf', '_missed.pdf') : `${filenameBase}_missed.pdf`;
 
-    const pdfBlob = doc.output('blob');
-    const url = URL.createObjectURL(pdfBlob);
-    
-    chrome.downloads.download({ url, filename, saveAs: true });
-  };
+    const mainSections = [
+      { title: "Hosts:", list: filterPercentages(data.hosts) },
+      { title: "Organizers:", list: filterPercentages(data.organizers) },
+      { title: "Attendees:", list: filterPercentages(data.attendees) }
+    ];
 
-  const pdfFilename = filenameBase.endsWith('.pdf') ? filenameBase : `${filenameBase}.pdf`;
-  const missedFilename = filenameBase.endsWith('.pdf') ? filenameBase.replace('.pdf', '_missed.pdf') : `${filenameBase}_missed.pdf`;
+    createPDFDoc("Event Attendance", mainSections, pdfFilename);
 
-  const mainSections = [
-    { title: "Hosts:", list: filterPercentages(data.hosts) },
-    { title: "Organizers:", list: filterPercentages(data.organizers) },
-    { title: "Attendees:", list: filterPercentages(data.attendees) }
-  ];
+    if (data.rejected && data.rejected.length > 0) {
+      createPDFDoc("Missed Attendance", [{ title: "Missed:", list: data.rejected }], missedFilename);
+    }
 
-  createPDFDoc("Event Attendance", mainSections, pdfFilename);
-
-  if (data.missed && data.missed.length > 0) {
-    createPDFDoc("Missed Attendance", [{ title: "Missed:", list: data.missed }], missedFilename);
+    setStatus(`Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.rejected?.length || 0} missed!`);
+  } catch (error) {
+    setStatus(`PDF Error: ${error.message}`);
+    console.error(error);
   }
-
-  setStatus(`Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.missed?.length || 0} missed!`);
 };
 
 const handleScrapeResult = (format, results) => {
@@ -133,8 +147,10 @@ const handleScrapeResult = (format, results) => {
     let filenameBase = UI.filenameInput.value.trim();
     if (!filenameBase) {
       filenameBase = data.event_name || 'attendance';
-      UI.filenameInput.value = filenameBase;
     }
+    
+    filenameBase = filenameBase.replace(/[\/\\?%*:|"<>]/g, '-');
+    UI.filenameInput.value = filenameBase;
     
     if (format === 'json') {
       downloadJSON(data, filenameBase);
