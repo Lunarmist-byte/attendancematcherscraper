@@ -1,5 +1,23 @@
-const setStatus = (msg) => {
-  document.getElementById('status').textContent = msg;
+const UI = {
+  status: document.getElementById('status'),
+  filenameInput: document.getElementById('filenameInput'),
+  themeToggle: document.getElementById('themeToggle'),
+  scrapePdfBtn: document.getElementById('scrapePdfBtn'),
+  scrapeJsonBtn: document.getElementById('scrapeJsonBtn'),
+  scrapeMembersBtn: document.getElementById('scrapeMembersBtn'),
+  downloadDbBtn: document.getElementById('downloadDbBtn'),
+  clearDbBtn: document.getElementById('clearDbBtn'),
+  dbUploadInput: document.getElementById('dbUploadInput'),
+  uploadSupabaseBtn: document.getElementById('uploadSupabaseBtn'),
+  optionsBtn: document.getElementById('optionsBtn'),
+  cceaBtn: document.getElementById('cceaBtn')
+};
+
+const setStatus = (msg, duration = null) => {
+  UI.status.textContent = msg;
+  if (duration) {
+    setTimeout(() => { UI.status.textContent = ''; }, duration);
+  }
 };
 
 const filterPercentages = (list) => {
@@ -8,6 +26,24 @@ const filterPercentages = (list) => {
     const name = typeof item === 'object' && item !== null ? item.name : item;
     return !/\\d+%/.test(name);
   });
+};
+
+const formatMemberForPdf = (item) => {
+  if (typeof item !== 'object' || item === null) return item;
+  
+  let details = [];
+  if (item.department) details.push(item.department);
+  if (item.year) details.push(item.year);
+  
+  let idDetails = [];
+  if (item.register_number) idDetails.push(`Reg: ${item.register_number}`);
+  if (item.roll_no) idDetails.push(`Roll: ${item.roll_no}`);
+  
+  let formatted = item.name || "Unknown";
+  if (details.length > 0) formatted += ` - ${details.join(' ')}`;
+  if (idDetails.length > 0) formatted += ` (${idDetails.join(', ')})`;
+  
+  return formatted;
 };
 
 const downloadJSON = (data, filenameBase) => {
@@ -43,7 +79,7 @@ const generateAndDownloadPDF = (data, filenameBase) => {
       doc.setFontSize(11);
       if (list && list.length > 0) {
         list.forEach(item => {
-          const displayName = typeof item === 'object' && item !== null ? item.name : item;
+          const displayName = formatMemberForPdf(item);
           doc.text(`- ${displayName}`, 15, yPos);
           yPos += 6;
           if (yPos > 280) { doc.addPage(); yPos = 20; }
@@ -85,101 +121,104 @@ const generateAndDownloadPDF = (data, filenameBase) => {
   setStatus(`Scraped ${data.hosts?.length || 0} hosts, ${data.organizers?.length || 0} organizers, ${data.attendees?.length || 0} attendees, ${data.missed?.length || 0} missed!`);
 };
 
-async function scrapeData(format) {
-  setStatus('Scraping...');
+const handleScrapeResult = (format, results) => {
+  if (chrome.runtime.lastError) {
+    setStatus(`Error: ${chrome.runtime.lastError.message}`);
+    return;
+  }
+  
+  if (results && results[0] && results[0].result) {
+    const data = results[0].result;
+    
+    let filenameBase = UI.filenameInput.value.trim();
+    if (!filenameBase) {
+      filenameBase = data.event_name || 'attendance';
+      UI.filenameInput.value = filenameBase;
+    }
+    
+    if (format === 'json') {
+      downloadJSON(data, filenameBase);
+    } else if (format === 'pdf') {
+      generateAndDownloadPDF(data, filenameBase);
+    }
+  } else {
+    setStatus('Failed to scrape data.');
+  }
+};
 
+const executeScrape = async (format) => {
+  setStatus('Scraping...');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ['content.js']
-  }, (results) => {
-    if (chrome.runtime.lastError) {
-      setStatus(`Error: ${chrome.runtime.lastError.message}`);
-      return;
-    }
-    
-    if (results && results[0] && results[0].result) {
-      const data = results[0].result;
-      
-      let filenameBase = document.getElementById('filenameInput').value.trim();
-      if (!filenameBase) {
-        filenameBase = data.event_name || 'attendance';
-        document.getElementById('filenameInput').value = filenameBase;
-      }
-      
-      if (format === 'json') {
-        downloadJSON(data, filenameBase);
-      } else if (format === 'pdf') {
-        generateAndDownloadPDF(data, filenameBase);
-      }
-    } else {
-      setStatus('Failed to scrape data.');
-    }
-  });
-}
+  }, (results) => handleScrapeResult(format, results));
+};
 
-document.getElementById('scrapeJsonBtn').addEventListener('click', () => scrapeData('json'));
-document.getElementById('scrapePdfBtn').addEventListener('click', () => scrapeData('pdf'));
-
-document.getElementById('cceaBtn').addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://maker-clubs.netlify.app' });
-});
-
-document.getElementById('optionsBtn').addEventListener('click', () => {
-  if (chrome.runtime.openOptionsPage) {
-    chrome.runtime.openOptionsPage();
-  } else {
-    window.open(chrome.runtime.getURL('options.html'));
+const handleScrapeMembersResult = (results) => {
+  if (chrome.runtime.lastError) {
+    setStatus(`Error: ${chrome.runtime.lastError.message}`);
+    return;
   }
-});
+  if (results && results[0] && results[0].result) {
+    const data = results[0].result;
+    setStatus(`Scraped ${data.newUpdatesCount} new members. Total accumulated: ${data.totalUpdatesCount}.`);
+  } else {
+    setStatus('Failed to scrape members.');
+  }
+};
 
-document.getElementById('scrapeMembersBtn').addEventListener('click', async () => {
+const executeMemberScrape = async () => {
   setStatus('Scraping members...');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ['member_scraper.js']
-  }, (results) => {
-    if (chrome.runtime.lastError) {
-      setStatus(`Error: ${chrome.runtime.lastError.message}`);
-      return;
-    }
-    if (results && results[0] && results[0].result) {
-      const data = results[0].result;
-      setStatus(`Scraped ${data.newUpdatesCount} new members. Total accumulated: ${data.totalUpdatesCount}.`);
-    } else {
-      setStatus('Failed to scrape members.');
-    }
-  });
-});
+  }, handleScrapeMembersResult);
+};
 
-document.getElementById('downloadDbBtn').addEventListener('click', () => {
+const openMakerClubs = () => {
+  chrome.storage.local.get(['makerClubsUrl'], (storage) => {
+    const url = storage.makerClubsUrl || 'https://maker-clubs.netlify.app';
+    chrome.tabs.create({ url });
+  });
+};
+
+const openOptions = () => {
+  if (chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  } else {
+    window.open(chrome.runtime.getURL('options.html'));
+  }
+};
+
+const downloadLocalDb = () => {
   chrome.storage.local.get(['supabaseUpdates'], (storage) => {
     const updates = storage.supabaseUpdates || [];
     if (updates.length > 0) {
       const blob = new Blob([JSON.stringify(updates, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      chrome.downloads.download({ url, filename: 'db.json', saveAs: true }, () => {
-        setStatus(`Downloaded db.json with ${updates.length} members.`);
+      chrome.downloads.download({ url, filename: 'local_members.json', saveAs: true }, () => {
+        setStatus(`Downloaded local DB with ${updates.length} members.`, 3000);
       });
     } else {
-      setStatus('No members accumulated yet.');
+      setStatus('No members accumulated yet.', 3000);
     }
   });
-});
+};
 
-document.getElementById('clearDbBtn').addEventListener('click', () => {
+const clearLocalDb = () => {
   chrome.storage.local.remove(['supabaseUpdates', 'memberDB'], () => {
-    setStatus('Accumulated database cleared.');
+    setStatus('Local database cleared.', 3000);
   });
-});
+};
 
-document.getElementById('uploadSupabaseBtn').addEventListener('click', async () => {
-  const fileInput = document.getElementById('dbUploadInput');
-  if (fileInput.files.length === 0) {
-    setStatus('Please select a db.json file first.');
+const uploadToSupabase = async () => {
+  const file = UI.dbUploadInput.files[0];
+  if (!file) {
+    setStatus('Please select a JSON file first.', 3000);
     return;
   }
   
@@ -189,45 +228,62 @@ document.getElementById('uploadSupabaseBtn').addEventListener('click', async () 
     try {
       updates = JSON.parse(e.target.result);
     } catch {
-      setStatus('Invalid JSON file.');
+      setStatus('Invalid JSON file.', 3000);
       return;
     }
     
     if (!Array.isArray(updates)) {
-      setStatus('JSON should be an array of members.');
+      setStatus('JSON should be an array of members.', 3000);
       return;
     }
 
     setStatus('Uploading to Supabase...');
-    chrome.storage.local.get(['supabaseUrl', 'supabaseKey'], async (storage) => {
-      if (!storage.supabaseUrl || !storage.supabaseKey) {
-        setStatus('Error: Configure Supabase first.');
-        return;
-      }
+    const storage = await new Promise(res => chrome.storage.local.get(['supabaseUrl', 'supabaseKey'], res));
+    
+    if (!storage.supabaseUrl || !storage.supabaseKey) {
+      setStatus('Error: Configure Supabase first.', 4000);
+      return;
+    }
+    
+    let successCount = 0;
+    for (const update of updates) {
+      if (!update.email) continue;
       
-      let successCount = 0;
-      for (const update of updates) {
-        if (!update.email) continue;
-        try {
-          const res = await fetch(`${storage.supabaseUrl}/rest/v1/profiles?email=eq.${encodeURIComponent(update.email)}`, {
-            method: 'PATCH',
-            headers: {
-              'apikey': storage.supabaseKey,
-              'Authorization': `Bearer ${storage.supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ avatar_url: update.avatar_url })
-          });
-          if (res.ok) successCount++;
-        } catch (err) {
-          console.error("Supabase update error", err);
-        }
+      const payload = { avatar_url: update.avatar_url };
+      if (update.name) payload.name = update.name;
+      
+      try {
+        const res = await fetch(`${storage.supabaseUrl}/rest/v1/profiles?email=eq.${encodeURIComponent(update.email)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': storage.supabaseKey,
+            'Authorization': `Bearer ${storage.supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) successCount++;
+      } catch (err) {
+        console.error("Supabase update error", err);
       }
-      setStatus(`Upload complete! Synced ${successCount} out of ${updates.length}.`);
-    });
+    }
+    setStatus(`Upload complete! Synced ${successCount} out of ${updates.length}.`);
   };
-  reader.readAsText(fileInput.files[0]);
-});
+  reader.readAsText(file);
+};
+
+const initializeEventListeners = () => {
+  UI.scrapeJsonBtn.addEventListener('click', () => executeScrape('json'));
+  UI.scrapePdfBtn.addEventListener('click', () => executeScrape('pdf'));
+  UI.cceaBtn.addEventListener('click', openMakerClubs);
+  UI.optionsBtn.addEventListener('click', openOptions);
+  UI.scrapeMembersBtn.addEventListener('click', executeMemberScrape);
+  UI.downloadDbBtn.addEventListener('click', downloadLocalDb);
+  UI.clearDbBtn.addEventListener('click', clearLocalDb);
+  UI.uploadSupabaseBtn.addEventListener('click', uploadToSupabase);
+};
+
+document.addEventListener('DOMContentLoaded', initializeEventListeners);
 
 

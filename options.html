@@ -2,39 +2,75 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Attendance Scraper Options</title>
+  <title>Attendance Scraper Config</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-    <h2>Supabase Configuration</h2>
-    <button id="themeToggle" style="width: auto; padding: 6px; margin: 0; background: transparent; color: var(--text-main);" title="Toggle Theme">
-      <i data-lucide="moon"></i>
+  <div class="header">
+    <h2 class="title">Extension Configuration</h2>
+    <button id="themeToggle" class="theme-toggle" title="Toggle Theme">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
     </button>
   </div>
   
-  <p>Enter your Supabase project credentials so the extension can read and write to your member database.</p>
-  
-  <div class="form-group">
-    <label for="supabaseUrl">Supabase URL</label>
-    <input type="text" id="supabaseUrl" placeholder="https://your-project-id.supabase.co" />
+  <div class="section">
+    <h3 class="section-title">Supabase Connection</h3>
+    <p class="section-desc">Connect to your Supabase project to sync scraped members.</p>
+    
+    <div class="form-group">
+      <label for="supabaseUrl">Supabase URL</label>
+      <input type="text" id="supabaseUrl" class="input-field" placeholder="https://your-project-id.supabase.co" />
+    </div>
+    
+    <div class="form-group">
+      <label for="supabaseKey">Supabase Anon Key</label>
+      <input type="password" id="supabaseKey" class="input-field" placeholder="eyJhbGciOiJIUzI1NiIsInR5..." />
+    </div>
+    
+    <button id="saveSupabaseBtn" class="btn-primary">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+      Save Connection
+    </button>
+    <div id="supabaseStatus" class="status-message"></div>
   </div>
   
-  <div class="form-group">
-    <label for="supabaseKey">Supabase Anon Key</label>
-    <input type="password" id="supabaseKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5..." />
+  <div class="section">
+    <h3 class="section-title">Maker Clubs</h3>
+    <p class="section-desc">Configure the destination URL for Maker Clubs.</p>
+    
+    <div class="form-group">
+      <label for="makerClubsUrl">Maker Clubs Dashboard URL</label>
+      <input type="text" id="makerClubsUrl" class="input-field" placeholder="https://maker-clubs.netlify.app" />
+    </div>
+    
+    <button id="saveMakerClubsBtn" class="btn-primary">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+      Save URL
+    </button>
+    <div id="makerClubsStatus" class="status-message"></div>
   </div>
-  
-  <button id="saveBtn"><i data-lucide="save" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: text-bottom;"></i> Save Configuration</button>
-  <div id="status"></div>
 
-  <div style="margin-top: 24px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 16px;">
+  <div class="section">
+    <h3 class="section-title">Member Data Sync</h3>
+    <p class="section-desc">Bulk import member details (Register No, Roll No, Dept, Year) via CSV or JSON.</p>
+    
+    <div class="form-group">
+      <input type="file" id="memberDataFile" class="file-input" accept=".csv,.json" />
+    </div>
+    
+    <button id="syncMemberDataBtn" class="btn-primary">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line></svg>
+      Sync to Supabase
+    </button>
+    <div id="syncStatus" class="status-message"></div>
+  </div>
+
+  <div class="footer">
     Made by <strong>Lunarmist-byte</strong><br>
-    <a href="https://github.com/Lunarmist-byte" target="_blank" style="color: var(--primary-color); text-decoration: none; margin-right: 12px;">GitHub</a>
-    <a href="https://www.linkedin.com/in/amal-s-kumar-ba69a1290/" target="_blank" style="color: var(--primary-color); text-decoration: none;">LinkedIn</a>
+    <a href="https://github.com/Lunarmist-byte" target="_blank">GitHub</a>
+    <a href="https://www.linkedin.com/in/amal-s-kumar-ba69a1290/" target="_blank">LinkedIn</a>
   </div>
 
-  <script src="lucide.min.js"></script>
   <script src="theme.js"></script>
   <script src="options.js"></script>
 </body>
